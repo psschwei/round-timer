@@ -1,0 +1,222 @@
+use iced::widget::{button, column, container, progress_bar, row, text, text_input};
+use iced::{Alignment, Element, Length, Subscription, Task};
+
+mod audio;
+mod timer;
+
+fn main() -> iced::Result {
+    iced::application("Recurring Timer", RecurringTimer::update, RecurringTimer::view)
+        .subscription(RecurringTimer::subscription)
+        .run_with(RecurringTimer::new)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TimerState {
+    Stopped,
+    Running,
+    Paused,
+}
+
+struct RecurringTimer {
+    interval_input: String,
+    duration_input: String,
+    interval_secs: u32,
+    duration_mins: u32,
+    timer_state: TimerState,
+    elapsed_secs: u32,
+    total_duration_secs: u32,
+    chime_count: u32,
+    audio_player: audio::AudioPlayer,
+}
+
+#[derive(Debug, Clone)]
+enum Message {
+    IntervalChanged(String),
+    DurationChanged(String),
+    Start,
+    Pause,
+    Resume,
+    Stop,
+    Tick,
+}
+
+impl RecurringTimer {
+    fn new() -> (Self, Task<Message>) {
+        (
+            Self {
+                interval_input: String::from("60"),
+                duration_input: String::from("20"),
+                interval_secs: 60,
+                duration_mins: 20,
+                timer_state: TimerState::Stopped,
+                elapsed_secs: 0,
+                total_duration_secs: 20 * 60,
+                chime_count: 0,
+                audio_player: audio::AudioPlayer::new(),
+            },
+            Task::none(),
+        )
+    }
+
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::IntervalChanged(value) => {
+                self.interval_input = value.clone();
+                if let Ok(secs) = value.parse::<u32>() {
+                    if secs > 0 {
+                        self.interval_secs = secs;
+                    }
+                }
+            }
+            Message::DurationChanged(value) => {
+                self.duration_input = value.clone();
+                if let Ok(mins) = value.parse::<u32>() {
+                    if mins > 0 {
+                        self.duration_mins = mins;
+                        self.total_duration_secs = mins * 60;
+                    }
+                }
+            }
+            Message::Start => {
+                self.timer_state = TimerState::Running;
+                self.elapsed_secs = 0;
+                self.chime_count = 0;
+                self.total_duration_secs = self.duration_mins * 60;
+            }
+            Message::Pause => {
+                self.timer_state = TimerState::Paused;
+            }
+            Message::Resume => {
+                self.timer_state = TimerState::Running;
+            }
+            Message::Stop => {
+                self.timer_state = TimerState::Stopped;
+                self.elapsed_secs = 0;
+                self.chime_count = 0;
+            }
+            Message::Tick => {
+                if self.timer_state == TimerState::Running {
+                    self.elapsed_secs += 1;
+
+                    // Check if it's time to play a chime
+                    if self.elapsed_secs % self.interval_secs == 0 {
+                        self.chime_count += 1;
+                        self.audio_player.play_chime();
+                    }
+
+                    // Check if we've reached the total duration
+                    if self.elapsed_secs >= self.total_duration_secs {
+                        self.timer_state = TimerState::Stopped;
+                    }
+                }
+            }
+        }
+        Task::none()
+    }
+
+    fn view(&self) -> Element<Message> {
+        let is_configurable = self.timer_state == TimerState::Stopped;
+
+        let interval_input = text_input("Interval (seconds)", &self.interval_input)
+            .on_input(Message::IntervalChanged)
+            .padding(10);
+
+        let duration_input = text_input("Duration (minutes)", &self.duration_input)
+            .on_input(Message::DurationChanged)
+            .padding(10);
+
+        let inputs = if is_configurable {
+            row![
+                column![text("Interval (seconds)"), interval_input].spacing(5),
+                column![text("Duration (minutes)"), duration_input].spacing(5),
+            ]
+            .spacing(20)
+        } else {
+            row![
+                column![
+                    text("Interval (seconds)"),
+                    text(&self.interval_input).size(16)
+                ]
+                .spacing(5),
+                column![
+                    text("Duration (minutes)"),
+                    text(&self.duration_input).size(16)
+                ]
+                .spacing(5),
+            ]
+            .spacing(20)
+        };
+
+        let control_buttons = match self.timer_state {
+            TimerState::Stopped => row![button("Start").on_press(Message::Start)].spacing(10),
+            TimerState::Running => {
+                row![
+                    button("Pause").on_press(Message::Pause),
+                    button("Stop").on_press(Message::Stop)
+                ]
+                .spacing(10)
+            }
+            TimerState::Paused => {
+                row![
+                    button("Resume").on_press(Message::Resume),
+                    button("Stop").on_press(Message::Stop)
+                ]
+                .spacing(10)
+            }
+        };
+
+        let remaining_secs = self.total_duration_secs.saturating_sub(self.elapsed_secs);
+        let remaining_mins = remaining_secs / 60;
+        let remaining_secs_part = remaining_secs % 60;
+
+        let time_display = text(format!(
+            "Time Remaining: {:02}:{:02}",
+            remaining_mins, remaining_secs_part
+        ))
+        .size(24);
+
+        let chime_display = text(format!("Chimes: {}", self.chime_count)).size(20);
+
+        let progress = if self.total_duration_secs > 0 {
+            self.elapsed_secs as f32 / self.total_duration_secs as f32
+        } else {
+            0.0
+        };
+
+        let progress_bar = progress_bar(0.0..=1.0, progress);
+
+        let status_text = match self.timer_state {
+            TimerState::Stopped => "Stopped",
+            TimerState::Running => "Running",
+            TimerState::Paused => "Paused",
+        };
+        let status_display = text(format!("Status: {}", status_text)).size(16);
+
+        let content = column![
+            text("Recurring Timer").size(32),
+            inputs,
+            control_buttons,
+            status_display,
+            time_display,
+            progress_bar,
+            chime_display,
+        ]
+        .spacing(20)
+        .padding(20)
+        .align_x(Alignment::Center);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center(Length::Fill)
+            .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        if self.timer_state == TimerState::Running {
+            timer::timer_subscription()
+        } else {
+            Subscription::none()
+        }
+    }
+}
