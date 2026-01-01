@@ -1,4 +1,4 @@
-# Recurring Timer
+# Round Timer
 
 A minimal desktop application for Linux that plays a chime at regular intervals for a specified duration.
 
@@ -26,7 +26,7 @@ cargo run --release
 Or run the compiled binary:
 
 ```bash
-./target/release/recurring-timer
+./target/release/round-timer
 ```
 
 ## Usage
@@ -65,7 +65,7 @@ Built with:
 ## File Structure
 
 ```
-recurring-timer/
+round-timer/
 ├── Cargo.toml           # Project dependencies
 ├── README.md            # This file
 ├── src/

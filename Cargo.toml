@@ -1,9 +1,9 @@
 [package]
-name = "recurring-timer"
+name = "round-timer"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-iced = { version = "0.13", features = ["tokio"] }
+iced = { version = "0.13", features = ["tokio", "canvas"] }
 rodio = "0.19"

@@ -1,11 +1,12 @@
 use iced::widget::{button, column, container, progress_bar, row, text, text_input};
-use iced::{Alignment, Element, Length, Subscription, Task};
+use iced::{Alignment, Color, Element, Length, Subscription, Task};
 
 mod audio;
+mod circular_progress;
 mod timer;
 
 fn main() -> iced::Result {
-    iced::application("Recurring Timer", RecurringTimer::update, RecurringTimer::view)
+    iced::application("Round Timer", RecurringTimer::update, RecurringTimer::view)
         .subscription(RecurringTimer::subscription)
         .run_with(RecurringTimer::new)
 }
@@ -174,10 +175,10 @@ impl RecurringTimer {
         let remaining_secs_part = remaining_secs % 60;
 
         let time_display = text(format!(
-            "Time Remaining: {:02}:{:02}",
+            "Total Time Remaining: {:02}:{:02}",
             remaining_mins, remaining_secs_part
         ))
-        .size(24);
+        .size(18);
 
         let round_remaining_secs = if self.interval_secs > 0 {
             let time_in_round = self.elapsed_secs % self.interval_secs;
@@ -196,7 +197,7 @@ impl RecurringTimer {
             "Round Time Remaining: {:02}:{:02}",
             round_remaining_mins, round_remaining_secs_part
         ))
-        .size(20);
+        .size(28);
 
         let round_display = text(format!("Round: {}", self.round_number)).size(20);
 
@@ -208,6 +209,19 @@ impl RecurringTimer {
 
         let progress_bar = progress_bar(0.0..=1.0, progress);
 
+        // Calculate round progress for circular indicator (shows remaining time)
+        let round_progress = if self.interval_secs > 0 {
+            let time_in_round = self.elapsed_secs % self.interval_secs;
+            let remaining = if time_in_round == 0 {
+                self.interval_secs
+            } else {
+                self.interval_secs - time_in_round
+            };
+            remaining as f32 / self.interval_secs as f32
+        } else {
+            0.0
+        };
+
         let status_text = match self.timer_state {
             TimerState::Stopped => "Stopped",
             TimerState::Running => "Running",
@@ -216,14 +230,16 @@ impl RecurringTimer {
         let status_display = text(format!("Status: {}", status_text)).size(16);
 
         let content = column![
-            text("Recurring Timer").size(32),
+            text("Round Timer").size(32),
             inputs,
             control_buttons,
             status_display,
-            time_display,
             round_time_display,
-            progress_bar,
+            circular_progress::circular_progress(round_progress, Color::from_rgb(0.2, 0.7, 0.9))
+                .map(|_| Message::Tick),
             round_display,
+            progress_bar,
+            time_display,
         ]
         .spacing(20)
         .padding(20)
